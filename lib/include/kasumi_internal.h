@@ -81,19 +81,26 @@ typedef union SafeBuffer {
 
 #define FIp1(data, key1, key2, key3)                                           \
         do {                                                                   \
-                uint16_t datal, datah;                                         \
-                                                                                \
+                uint16_t datal, datah, datalh, s7_data, s9_data;        \
+                                                                               \
                 (data) ^= (key1);                                              \
-                datah = data >> 7; \
+                datalh = KASUMI_SBOX_AVX2(data);                               \
+                s7_data = datalh & 0x7F;                                       \
+                s9_data = datalh >> 7;   \
+                datah = data >> 7;                                             \
                 datal = data & 0x7F; \
-                datah = KASUMI_S9_BOX_AVX2(datah) ^ (datal); \
-                datal = KASUMI_S7_BOX_AVX2(datal) ^ (datah & 0x7F);  \
+                datah = s9_data ^ (datal);                                   \
+                datal = s7_data ^ (datah & 0x7F);  \
                 datal ^= (key2 >> 9); \
                 datah ^= (key2 & 0x1ff) ; \
-                datah = KASUMI_S9_BOX_AVX2(datah) ^ (datal); \
-                datal = KASUMI_S7_BOX_AVX2(datal) ^ (datah & 0x7F);  \
-                (data) = (datal << 9) ^ datah;                                        \
-                (data) ^= (key3);                                              \
+                (data) = (datah << 7) ^ datal;                                 \
+                datalh = KASUMI_SBOX_AVX2(data);                               \
+                s7_data = datalh & 0x7F;                                       \
+                s9_data = datalh >> 7;                 \
+                datah = s9_data ^ (datal);                                     \
+                datal = s7_data ^ (datah & 0x7f);                            \
+                (data) = (datal << 9) ^ datah;                                 \
+                (data) ^= (key3);\
         } while (0)
 
 #define FIp2(data1, data2, key1, key2, key3, key4)                             \
