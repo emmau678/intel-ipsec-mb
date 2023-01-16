@@ -71,6 +71,33 @@ bcast_mask:
         db 0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01,
         db 0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01
 
+align 16
+;; Masks for the s7 box function
+x0_mask     dq  0xB3FF347F3AFFDEFF, 0x00009DBF93DF756F
+x1_mask     dq  0x1ABFEB7F77FF5F6F, 0x00002D7FEF3FC6BF
+x2_mask     dq  0xBD7FCDBFD6FFF7DF, 0x00007EFF25B77BFF
+x3_mask     dq  0xEDBF97FFFB7F7BBF, 0x0000B6FFCFCF9ACF
+x4_mask     dq  0xCEFFE7DF9FBF9BD7, 0x0000DF7FF6EFE37F
+x5_mask     dq  0xF0FFF9FFE3BFE3E7, 0x0000E7BFF8F7FC77
+x6_mask     dq  0xFF3FFE1FFC3FFC07, 0x0000F83FFF07FF87
+x_mask_last dq  0xFFC0FFF0FFE0FFF8, 0x0000FFC0FFFCFFFC
+s7_word_mask   dq  0x0100010001000100, 0x0100010001000100
+
+align 32
+;; Masks for the s9 box function
+y0_mask     dq  0x5B7FAFEFABFF77FF, 0x37FF7FFFEFFF6BFF, 0x0000000000007FFF
+y1_mask     dq  0xBDBF7FFF377FFBFF, 0x5FFFDFBFB7FF3EFF, 0x00000000000055FF
+y2_mask     dq  0xAFFFF7FFDFBF5DFF, 0x9ABFAFFF7FFFFF7F, 0x0000000000009BBF
+y3_mask     dq  0xDFFF9BFFDDFFBFFF, 0xE37FBBDFFBFFB7BF, 0X000000000000EFDF
+y4_mask     dq  0xEEFFDEFFE7FFFEFF, 0xFDFFF5FF9DFFDFFF, 0x000000000000EEFF
+y5_mask     dq  0xF7FFED7FF9DFCF7F, 0xFDDFC6EFDF7FEFFF, 0x000000000000F3FF
+y6_mask     dq  0xF9FFF1BFFEFFEFFF, 0xFE7FF8FFE6BFF5FF, 0x000000000000FCFF
+y7_mask     dq  0xFEDFFE3FFF3FF1BF, 0xFF9FFF77F8DFF9FF, 0x000000000000FF7F
+y8_mask     dq  0xFF1FFFCFFFDFFE3F, 0xFFEFFF87FF1FFE3F, 0x000000000000FF9F
+y_mask_last dq  0xFFE0FFF8FFF0FFE0, 0xFFF8FFF8FFF0FFC0, 0x000000000000FFE0
+align 32
+word_mask   dq  0x0100010001000100, 0x0100010001000100, 0x0100010001000100, 0x0100010001000100
+
 align 64
 idx_rows_avx:
 times 4 dd 0x00000000
@@ -133,6 +160,137 @@ mksection .text
 %define table   arg1
 %define idx     arg2
 %define size    arg3
+
+%define     x0    xmm2
+%define     x1    xmm3
+%define     x2    xmm4
+%define     x3    xmm5
+%define     x4    xmm6
+%define     x5    xmm7
+%define     x6    xmm8
+%define     x7    xmm9
+%define     x8    xmm11
+%define     y0    ymm2
+%define     y1    ymm3
+%define     y2    ymm4
+%define     y3    ymm5
+%define     y4    ymm6
+%define     y5    ymm7
+%define     y6    ymm8
+%define     y7    ymm9
+%define     y8    ymm11
+
+%define     y(n)  y %+ n
+%define     y_mask(n)   y %+ n %+_mask
+
+%define     x(n)  x %+ n
+%define     x_mask(n)   x %+ n %+_mask
+
+align 32
+MKGLOBAL(kasumi_s7_box_avx2, function, internal)
+kasumi_s7_box_avx2:
+    vpxor    xmm10, xmm10, xmm10; xmm10 contains all 0s
+
+    vmovdqa xmm1, [rel s7_word_mask]
+    mov     r9, 1               ; r9 contains 1
+    mov     r10, rdi            ; copy rdi (input) into r10
+    and     r10, r9             ; clear r10 except for lowest input bit (0)
+    vmovd   xmm2, r10d          ; copy r10 into lowest byte of xmm2
+    vpshufb xmm2, xmm2, xmm1    ; copy this  byte across all words of xmm2
+    vpcmpgtw xmm2, xmm2, xmm10  ; fill with 1s if equal to 0, else fill with 0s#
+
+%assign i 1
+%rep 6
+    shl     r9, 1               ; repeat the process for each of the 7 input bits,
+    mov     r10, rdi            ; in increasing order of significance
+    and     r10, r9
+    vmovd   x(i), r10d
+    vpshufb x(i), x(i), xmm1
+    vpcmpgtw x(i), x(i), xmm10
+%assign i (i + 1)
+%endrep
+
+%assign i 0
+%rep 7
+    vpor    x(i), x(i), [rel x_mask(i)] ; or the x-masks with the x-values
+%assign i (i + 1)
+%endrep
+
+    vpand   xmm2, xmm3      ; carry out the AND operations to combine all x-masks
+    vpand   xmm4, xmm5
+    vpand   xmm6, xmm7
+    vpand   xmm2, xmm4
+    vpand   xmm6, xmm8
+    vpand   xmm2, xmm6
+
+    vpand   xmm2, [rel x_mask_last] ; mask which accounts for setting 1s and 0s in set locations
+    vpxor   xmm10, xmm10, xmm10
+    vpxor   xmm10, xmm2
+%rep 15
+    vpsllw  xmm2, xmm2, 1
+    vpxor   xmm10, xmm10, xmm2
+%endrep
+    vpmovmskb   r9, xmm10
+    mov         r10, 0xAAAA
+    pext        rax, r9, r10
+
+    ret
+
+align 32
+MKGLOBAL(kasumi_s9_box_avx2, function, internal)
+kasumi_s9_box_avx2:
+    vpxor    ymm10, ymm10, ymm10; xmm10 contains all 0s
+
+    vmovdqa ymm1, [rel word_mask]
+    mov     r9, 1               ; r9 contains 1
+    mov     r10, rdi            ; copy rdi (input) into r10
+    and     r10, r9             ; clear r10 except for lowest input bit (0)
+    vmovd   xmm2, r10d
+    ;vpshuflw   ymm2, ymm2, 0
+    ;vpunpcklwd ymm2, ymm2, ymm2
+    vpbroadcastw   ymm2, xmm2
+    vpcmpgtw ymm2, ymm2, ymm10  ; fill with 1s if equal to 0, else fill with 0s
+
+%assign i 1
+%rep 8
+    shl     r9, 1               ; repeat the process for each of the 9 input bits,
+    mov     r10, rdi            ; in increasing order of significance
+    and     r10, r9
+    vmovd   x(i), r10d
+    ;vpshuflw   y(i), y(i), 0
+    ;vpunpcklwd y(i), y(i), y(i)
+    vpbroadcastw   y(i), x(i)
+    vpcmpgtw y(i), y(i), ymm10
+%assign i (i + 1)
+%endrep
+
+%assign i 0
+%rep 9
+    vpor    y(i), y(i), [rel y_mask(i)] ; or the x-masks with the x-values
+%assign i (i + 1)
+%endrep
+
+    vpand   ymm2, ymm3      ; carry out the AND operations to combine all x-masks
+    vpand   ymm4, ymm5
+    vpand   ymm6, ymm7
+    vpand   ymm9, ymm11
+    vpand   ymm2, ymm4
+    vpand   ymm6, ymm8
+    vpand   ymm2, ymm6
+    vpand   ymm2, ymm9
+
+    vpand   ymm2, [rel y_mask_last] ; mask which accounts for setting 1s and 0s in set locations
+
+    vpxor   ymm10, ymm10, ymm2
+%rep 15
+    vpsllw  ymm2, ymm2, 1
+    vpxor   ymm10, ymm10, ymm2
+%endrep
+    vpmovmskb   r9, ymm10
+    mov         r10, 0x2AAAA
+    pext        rax, r9, r10
+
+    ret
 
 ; uint8_t lookup_8bit_sse(const void *table, const uint32_t idx, const uint32_t size);
 ; arg 1 : pointer to table to look up
