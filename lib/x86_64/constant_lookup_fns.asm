@@ -84,6 +84,17 @@ y8_mask     dq  0xffffffffffffffff, 0xFE3Fffffffffffff, 0xFE3FFF1FFFCFFFDF, 0xFF
 y_mask_last dq  0xFFC0FFF0FFE0FFF8, 0xFFE0FFC0FFFCFFFC, 0xFFC0FFE0FFF8FFF0, 0xFFE0FFF8FFF8FFF0
 s79_mask    dq  0x007F007F007F007F, 0xFF80007F007F007F, 0xFF80FF80FF80FF80, 0xFF80FF80FF80FF80
 
+align 32
+mask_0    dq  0x0081008100810081, 0x0081008100810081, 0x0081008100810081, 0x0081008100810081
+mask_1    dq  0x0102010201020102, 0x0102010201020102, 0x0102010201020102, 0x0102010201020102
+mask_2    dq  0x0204020402040204, 0x0204020402040204, 0x0204020402040204, 0x0204020402040204
+mask_3    dq  0x0408040804080408, 0x0408040804080408, 0x0408040804080408, 0x0408040804080408
+mask_4    dq  0x0810081008100810, 0x0810081008100810, 0x0810081008100810, 0x0810081008100810
+mask_5    dq  0x1020102010201020, 0x1020102010201020, 0x1020102010201020, 0x1020102010201020
+mask_6    dq  0x2040204020402040, 0x2040204020402040, 0x2040204020402040, 0x2040204020402040
+mask_7    dq  0x4000400040004000, 0x4000400040004000, 0x4000400040004000, 0x4000400040004000
+mask_8    dq  0x8000800080008000, 0x8000800080008000, 0x8000800080008000, 0x8000800080008000
+
 align 64
 idx_rows_avx:
 times 4 dd 0x00000000
@@ -171,45 +182,23 @@ mksection .text
 
 %define     x(n)  x %+ n
 %define     x_mask(n)   x %+ n %+_mask
+%define     mask(n) mask_ %+ n
 
 align 32
 MKGLOBAL(kasumi_sbox_avx2, function, internal)
 kasumi_sbox_avx2:
     vpxor    ymm10, ymm10, ymm10; xmm10 contains all 0s
     vpcmpeqd ymm12, ymm12, ymm12   ; ymm12 cotains all 1s
-    mov     r9, 129               ; r9 contains 1
-    mov     r10, rdi            ; copy rdi (input) into r10
-    and     r10, r9             ; clear r10 except for lowest input bit (0)
-    vmovd   xmm2, r10d          ; copy r10 into lowest byte of xmm2
-    vpbroadcastw ymm2, xmm2
-    vpand   ymm2, ymm2, [rel s79_mask]
-    vpcmpeqw ymm2, ymm2, ymm10  ; fill with 1s if equal to 0, else fill with 0s
-    vpxor   ymm2, ymm2, ymm12    ; invert the bits
 
-%assign i 1
-%rep 6
-    shl     r9, 1               ; repeat the process for each of the 7 input bits,
-    mov     r10, rdi            ; in increasing order of significance
-    and     r10, r9
-    vmovd   x(i), r10d
-    vpbroadcastw y(i), x(i)
+    vmovd   xmm13, edi          ; copy r10 into lowest byte of xmm2
+    vpbroadcastw ymm13, xmm13     ; broadcast input across all words of xmm2
+
+%assign i 0
+%rep 9
+    vpand   y(i), ymm13, [rel mask(i)]
     vpand   y(i), y(i), [rel s79_mask]
     vpcmpeqw y(i), y(i), ymm10  ; fill with 1s if equal to 0, else fill with 0s
     vpxor   y(i), y(i), ymm12    ; invert the bits
-%assign i (i + 1)
-%endrep
-
-    mov     r9, 0x4000
-
-%rep 2
-    mov     r10, rdi            ; in increasing order of significance
-    and     r10, r9
-    vmovd   x(i), r10d
-    vpbroadcastw   y(i), x(i)
-    vpand   y(i), y(i), [rel s79_mask]
-    vpcmpeqw y(i), y(i), ymm10  ; fill with 1s if equal to 0, else fill with 0s
-    vpxor   y(i), y(i), ymm12    ; invert the bits
-    shl     r9, 1               ; repeat the process for each of the 9 input bits,
 %assign i (i + 1)
 %endrep
 
