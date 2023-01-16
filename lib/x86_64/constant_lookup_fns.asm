@@ -186,15 +186,13 @@ mksection .text
 align 32
 MKGLOBAL(kasumi_sbox_avx2, function, internal)
 kasumi_sbox_avx2:
-    vpxor    ymm10, ymm10, ymm10; xmm10 contains all 0s
-    vpcmpeqd ymm12, ymm12, ymm12   ; ymm12 cotains all 1s
+    vpxor       ymm10, ymm10, ymm10
     vmovd   xmm13, edi          ; copy r10 into lowest byte of xmm2
     vpbroadcastw ymm13, xmm13     ; broadcast input across all words of xmm2
 %assign i 0
 %rep 9
     vpand   y(i), ymm13, [rel mask(i)]
-    vpcmpeqw y(i), y(i), ymm10  ; fill with 1s if equal to 0, else fill with 0s
-    vpxor   y(i), y(i), ymm12    ; invert the bits
+    vpcmpeqw y(i), y(i), [rel mask(i)]  ; fill with 1s if equal to 0, else fill with 0s
 %assign i (i + 1)
 %endrep
 
