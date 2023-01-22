@@ -183,33 +183,7 @@ mksection .text
 %define     x_mask(n)   x %+ n %+_mask
 %define     mask(n) mask_ %+ n
 
-;; arg1: data
-;; arg2: key1
-;; arg3: key2
-;; arg4: key3    
-align 32
-MKGLOBAL(kasumi_FI_avx2, function, internal)
-kasumi_FI_avx2:
-    xor     arg1, arg2
-    call    kasumi_sbox_avx2
-    pdep    arg1, arg1, [rel high_7]
-    xor     arg1, rax
-    pext    r8, arg1, [rel high_7]
-    xor     arg1, r8
-    ror     dx, 9
-    xor     arg1, arg3
-    call    kasumi_sbox_avx2
-    pdep    arg1, arg1, [rel high_7]
-    xor     rax, arg1
-    pext    r8, rax, [rel high_7]
-    xor     rax, r8
-    ror     ax, 7
-    xor     rax, arg4
-    ret
-
-align 32
-MKGLOBAL(kasumi_sbox_avx2, function, internal)
-kasumi_sbox_avx2:
+%macro KASUMI_SBOX_AVX2 0
     vpxor       ymm10, ymm10, ymm10
     vmovd   xmm13, edi          ; copy r10 into lowest byte of xmm2
     vpbroadcastw ymm13, xmm13     ; broadcast input across all words of xmm2
@@ -247,7 +221,30 @@ kasumi_sbox_avx2:
 
     vpmovmskb   r9, ymm2
     pext        rax, r9, [rel test_t]
+%endmacro
 
+;; arg1: data
+;; arg2: key1
+;; arg3: key2
+;; arg4: key3    
+align 32
+MKGLOBAL(kasumi_FI_avx2, function, internal)
+kasumi_FI_avx2:
+    xor     arg1, arg2
+    KASUMI_SBOX_AVX2
+    pdep    arg1, arg1, [rel high_7]
+    xor     arg1, rax
+    pext    r8, arg1, [rel high_7]
+    xor     arg1, r8
+    ror     dx, 9
+    xor     arg1, arg3
+    KASUMI_SBOX_AVX2
+    pdep    arg1, arg1, [rel high_7]
+    xor     rax, arg1
+    pext    r8, rax, [rel high_7]
+    xor     rax, r8
+    ror     ax, 7
+    xor     rax, arg4
     ret
 
 ; uint8_t lookup_8bit_sse(const void *table, const uint32_t idx, const uint32_t size);
