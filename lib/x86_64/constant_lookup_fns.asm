@@ -190,7 +190,6 @@ align 32
 MKGLOBAL(kasumi_FI_avx2, function, internal)
 kasumi_FI_avx2:
     xor     arg1, arg2
-    mov     r8, arg1            ; save arg1 to r8
     call    kasumi_sbox_avx2
     pdep    arg1, arg1, [rel high_7]
     xor     arg1, rax
@@ -202,14 +201,13 @@ kasumi_FI_avx2:
     xor     arg1, arg3
     call    kasumi_sbox_avx2
     pdep    arg1, arg1, [rel high_7]
-    xor     arg1, rax
-    mov     r8, arg1
+    xor     rax, arg1
+    mov     r8, rax
     shr     r8, 7
     and     r8, [rel low_7]
-    xor     arg1, r8
-    ror     di, 7
-    xor     arg1, arg4
-    mov     rax, arg1
+    xor     rax, r8
+    ror     ax, 7
+    xor     rax, arg4
     ret
 
 align 32
