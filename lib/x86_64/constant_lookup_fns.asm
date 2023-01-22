@@ -94,9 +94,10 @@ mask_6    dq  0x0040004000400040, 0x2000004000400040, 0x2000200020002000, 0x2000
 mask_7    dq  0x0000000000000000, 0x4000000000000000, 0x4000400040004000, 0x4000400040004000
 mask_8    dq  0x0000000000000000, 0x8000000000000000, 0x8000800080008000, 0x8000800080008000
 
-align 16
-high_7    dw  0x3F80
-low_7     dw  0x7F
+align 8
+high_7    dq  0x3F80
+align 8
+test_t    dq  0xAAAAAAAA
 
 align 64
 idx_rows_avx:
@@ -193,18 +194,14 @@ kasumi_FI_avx2:
     call    kasumi_sbox_avx2
     pdep    arg1, arg1, [rel high_7]
     xor     arg1, rax
-    mov     r8, arg1
-    shr     r8, 7
-    and     r8, [rel low_7]
+    pext    r8, arg1, [rel high_7]
     xor     arg1, r8
     ror     dx, 9
     xor     arg1, arg3
     call    kasumi_sbox_avx2
     pdep    arg1, arg1, [rel high_7]
     xor     rax, arg1
-    mov     r8, rax
-    shr     r8, 7
-    and     r8, [rel low_7]
+    pext    r8, rax, [rel high_7]
     xor     rax, r8
     ror     ax, 7
     xor     rax, arg4
@@ -249,8 +246,7 @@ kasumi_sbox_avx2:
     vpxor       ymm2, ymm2, ymm10
 
     vpmovmskb   r9, ymm2
-    mov         r10, 0xAAAAAAAA
-    pext        rax, r9, r10
+    pext        rax, r9, [rel test_t]
 
     ret
 
