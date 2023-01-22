@@ -211,13 +211,17 @@ kasumi_sbox_avx2:
     vpand   ymm2, ymm6
     vpand   ymm2, ymm9
 
-    vpand   ymm2, [rel y_mask_last] ; mask which accounts for setting 1s and 0s in set locations
-    vpxor   ymm10, ymm10, ymm2
-%rep 15
-    vpsllw  ymm2, ymm2, 1
-    vpxor   ymm10, ymm10, ymm2
-%endrep
-    vpmovmskb   r9, ymm10
+    vpand   ymm2, ymm2, [rel y_mask_last] ; mask which accounts for setting 1s and 0s in set locations
+    vpsllw      ymm10, ymm2, 8
+    vpxor       ymm2, ymm2, ymm10
+    vpsllw      ymm10, ymm2, 4
+    vpxor       ymm2, ymm2, ymm10
+    vpsllw      ymm10, ymm2, 2
+    vpxor       ymm2, ymm2, ymm10
+    vpsllw      ymm10, ymm2, 1
+    vpxor       ymm2, ymm2, ymm10
+
+    vpmovmskb   r9, ymm2
     mov         r10, 0xAAAAAAAA
     pext        rax, r9, r10
 
