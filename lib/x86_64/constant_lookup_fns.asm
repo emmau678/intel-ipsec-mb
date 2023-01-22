@@ -94,6 +94,10 @@ mask_6    dq  0x0040004000400040, 0x2000004000400040, 0x2000200020002000, 0x2000
 mask_7    dq  0x0000000000000000, 0x4000000000000000, 0x4000400040004000, 0x4000400040004000
 mask_8    dq  0x0000000000000000, 0x8000000000000000, 0x8000800080008000, 0x8000800080008000
 
+align 16
+high_7    dw  0x3F80
+low_7     dw  0x7F
+
 align 64
 idx_rows_avx:
 times 4 dd 0x00000000
@@ -134,15 +138,10 @@ times 8 dd 0xf0f0f0f0
 
 mksection .text
 
-%ifdef LINUX
         %define arg1    rdi
         %define arg2    rsi
         %define arg3    rdx
-%else
-        %define arg1    rcx
-        %define arg2    rdx
-        %define arg3    r8
-%endif
+        %define arg4    rcx
 
 %define bcast_idx xmm0
 %define xadd      xmm1
@@ -182,6 +181,36 @@ mksection .text
 %define     x(n)  x %+ n
 %define     x_mask(n)   x %+ n %+_mask
 %define     mask(n) mask_ %+ n
+
+;; arg1: data
+;; arg2: key1
+;; arg3: key2
+;; arg4: key3    
+align 32
+MKGLOBAL(kasumi_FI_avx2, function, internal)
+kasumi_FI_avx2:
+    xor     arg1, arg2
+    mov     r8, arg1            ; save arg1 to r8
+    call    kasumi_sbox_avx2
+    pdep    arg1, arg1, [rel high_7]
+    xor     arg1, rax
+    mov     r8, arg1
+    shr     r8, 7
+    and     r8, [rel low_7]
+    xor     arg1, r8
+    ror     dx, 9
+    xor     arg1, arg3
+    call    kasumi_sbox_avx2
+    pdep    arg1, arg1, [rel high_7]
+    xor     arg1, rax
+    mov     r8, arg1
+    shr     r8, 7
+    and     r8, [rel low_7]
+    xor     arg1, r8
+    ror     di, 7
+    xor     arg1, arg4
+    mov     rax, arg1
+    ret
 
 align 32
 MKGLOBAL(kasumi_sbox_avx2, function, internal)
