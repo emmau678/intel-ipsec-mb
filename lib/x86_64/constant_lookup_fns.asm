@@ -94,6 +94,20 @@ mask_6    dq  0x0040004000400040, 0x2000004000400040, 0x2000200020002000, 0x2000
 mask_7    dq  0x0000000000000000, 0x4000000000000000, 0x4000400040004000, 0x4000400040004000
 mask_8    dq  0x0000000000000000, 0x8000000000000000, 0x8000800080008000, 0x8000800080008000
 
+align 32
+new_msk0  dq  0x0000000000000000, 0x0007000000000000, 0x0007000700070007, 0x0007000700070007
+new_msk1  dq  0x0001000100010001, 0x0008000100010001, 0x0008000800080008, 0x0008000800080008
+new_msk2  dq  0x0002000200020002, 0x0009000200020002, 0x0009000900090009, 0x0009000900090009
+new_msk3  dq  0x0003000300030003, 0x000a000300030003, 0x000a000a000a000a, 0x000a000a000a000a
+new_msk4  dq  0x0004000400040004, 0x000b000400040004, 0x000b000b000b000b, 0x000b000b000b000b
+new_msk5  dq  0x0005000500050005, 0x000c000500050005, 0x000c000c000c000c, 0x000c000c000c000c
+new_msk6  dq  0x0006000600060006, 0x000d000600060006, 0x000d000d000d000d, 0x000d000d000d000d
+new_msk7  dq  0xffffffffffffffff, 0x000effffffffffff, 0x000e000e000e000e, 0x000e000e000e000e
+new_msk8  dq  0xffffffffffffffff, 0x000fffffffffffff, 0x000f000f000f000f, 0x000f000f000f000f
+
+align 32
+least_sig_bit_word dq 0x0001000100010001, 0x0001000100010001, 0x0001000100010001, 0x0001000100010001
+
 align 8
 high_7    dq  0x3F80
 align 8
@@ -182,45 +196,27 @@ mksection .text
 %define     x(n)  x %+ n
 %define     x_mask(n)   x %+ n %+_mask
 %define     mask(n) mask_ %+ n
+%define     new_msk(x) new_msk %+ x
 
 %macro KASUMI_SBOX_AVX2 0
-    vpxor       ymm10, ymm10, ymm10
-    vmovd   xmm13, edi          ; copy r10 into lowest byte of xmm2
-    vpbroadcastw ymm13, xmm13     ; broadcast input across all words of xmm2
+    vpmovm2w    ymm10, k1    ; vpand with kmask will give words full of corresponding bit values
 %assign i 0
 %rep 9
-    vpand   y(i), ymm13, [rel mask(i)]
-    vpcmpeqw y(i), y(i), [rel mask(i)]  ; fill with 1s if equal to 0, else fill with 0s
+    vmovdqa     y(i), [rel new_msk(i)]
+    vpermw      y(i), y(i), ymm10    ; fill register with the word value
 %assign i (i + 1)
 %endrep
-
-%assign i 0
-%rep 9
-    vpor    y(i), y(i), [rel y_mask(i)] ; or the x-masks with the x-values
+    vpor        y0, y0, [rel y_mask(0)]
+%assign i 1
+%rep 8
+    vpternlogq  y0, y(i), [rel y_mask(i)], 0xE0 ; or the x-masks with the x-values
 %assign i (i + 1)
 %endrep
-
-    vpand   ymm2, ymm3      ; carry out the AND operations to combine all x-masks
-    vpand   ymm4, ymm5
-    vpand   ymm6, ymm7
-    vpand   ymm9, ymm11
-    vpand   ymm2, ymm4
-    vpand   ymm6, ymm8
-    vpand   ymm2, ymm6
-    vpand   ymm2, ymm9
-
-    vpand   ymm2, ymm2, [rel y_mask_last] ; mask which accounts for setting 1s and 0s in set locations
-    vpsllw      ymm10, ymm2, 8
-    vpxor       ymm2, ymm2, ymm10
-    vpsllw      ymm10, ymm2, 4
-    vpxor       ymm2, ymm2, ymm10
-    vpsllw      ymm10, ymm2, 2
-    vpxor       ymm2, ymm2, ymm10
-    vpsllw      ymm10, ymm2, 1
-    vpxor       ymm2, ymm2, ymm10
-
-    vpmovmskb   r9, ymm2
-    pext        rax, r9, [rel test_t]
+    vpandd      ymm2, ymm2, [rel y_mask_last] ; mask which accounts for setting 1s and 0s in set locations
+    vpopcntw    ymm2, ymm2
+    vpand       ymm2, ymm2, [rel least_sig_bit_word]
+    vpcmpw      k1, ymm2, [rel least_sig_bit_word], 0
+    kmovd       eax, k1
 %endmacro
 
 ;; arg1: data
@@ -231,6 +227,7 @@ align 32
 MKGLOBAL(kasumi_FI_avx2, function, internal)
 kasumi_FI_avx2:
     xor     arg1, arg2
+    kmovd       k1, edi
     KASUMI_SBOX_AVX2
     pdep    arg1, arg1, [rel high_7]
     xor     arg1, rax
@@ -238,6 +235,7 @@ kasumi_FI_avx2:
     xor     arg1, r8
     ror     dx, 9
     xor     arg1, arg3
+    kmovd       k1, edi
     KASUMI_SBOX_AVX2
     pdep    arg1, arg1, [rel high_7]
     xor     rax, arg1
