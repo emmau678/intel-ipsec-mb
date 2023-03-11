@@ -246,6 +246,8 @@ lib_objs1 = \
 	$(OBJ_DIR)\kasumi_avx.obj \
 	$(OBJ_DIR)\kasumi_iv.obj \
 	$(OBJ_DIR)\kasumi_sse.obj \
+	$(OBJ_DIR)\kasumi_avx2.obj \
+	$(OBJ_DIR)\kasumi_avx512.obj \
 	$(OBJ_DIR)\zuc_common.obj \
 	$(OBJ_DIR)\zuc_top_sse.obj \
 	$(OBJ_DIR)\zuc_top_avx.obj \
