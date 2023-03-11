@@ -215,6 +215,67 @@ mksection .text
 %define     new_wmsk(x) new_wmsk %+ x
 
 %macro KASUMI_SBOX_AVX2 0
+    vpxor       ymm10, ymm10, ymm10
+    vmovd   xmm13, edi          ; copy r10 into lowest byte of xmm2
+    vpbroadcastw ymm13, xmm13     ; broadcast input across all words of xmm2
+%assign i 0
+%rep 9
+    vpand   y(i), ymm13, [rel mask(i)]
+    vpcmpeqw y(i), y(i), [rel mask(i)]  ; fill with 1s if equal to 0, else fill with 0s
+%assign i (i + 1)
+%endrep
+%assign i 0
+%rep 9
+    vpor    y(i), y(i), [rel y_mask(i)] ; or the x-masks with the x-values
+%assign i (i + 1)
+%endrep
+    vpand   ymm2, ymm3      ; carry out the AND operations to combine all x-masks
+    vpand   ymm4, ymm5
+    vpand   ymm6, ymm7
+    vpand   ymm9, ymm11
+    vpand   ymm2, ymm4
+    vpand   ymm6, ymm8
+    vpand   ymm2, ymm6
+    vpand   ymm2, ymm9
+    vpand   ymm2, ymm2, [rel y_mask_last] ; mask which accounts for setting 1s and 0s in set locations
+    vpsllw      ymm10, ymm2, 8
+    vpxor       ymm2, ymm2, ymm10
+    vpsllw      ymm10, ymm2, 4
+    vpxor       ymm2, ymm2, ymm10
+    vpsllw      ymm10, ymm2, 2
+    vpxor       ymm2, ymm2, ymm10
+    vpsllw      ymm10, ymm2, 1
+    vpxor       ymm2, ymm2, ymm10
+
+    vpmovmskb   r9, ymm2
+    pext        rax, r9, [rel test_t]
+%endmacro
+
+;; arg1: data
+;; arg2: key1
+;; arg3: key2
+;; arg4: key3    
+align 32
+MKGLOBAL(kasumi_FI_avx2, function, internal)
+kasumi_FI_avx2:
+    xor     arg1, arg2
+    KASUMI_SBOX_AVX2
+    pdep    arg1, arg1, [rel high_7]
+    xor     arg1, rax
+    pext    r8, arg1, [rel high_7]
+    xor     arg1, r8
+    ror     dx, 9
+    xor     arg1, arg3
+    KASUMI_SBOX_AVX2
+    pdep    arg1, arg1, [rel high_7]
+    xor     rax, arg1
+    pext    r8, rax, [rel high_7]
+    xor     rax, r8
+    ror     ax, 7
+    xor     rax, arg4
+    ret
+
+%macro KASUMI_SBOX_AVX512 0
     ; vpand with kmask will give words full of corresponding bit values
 %assign i 0
 %rep 9
@@ -237,8 +298,8 @@ mksection .text
 ;; arg3: key2
 ;; arg4: key3    
 align 32
-MKGLOBAL(kasumi_FI_avx2, function, internal)
-kasumi_FI_avx2:
+MKGLOBAL(kasumi_FI_avx512, function, internal)
+kasumi_FI_avx512:
     xor     arg1, arg2
     kmovd       k4, [rel zero]
     kmovd       k5, [rel mid]
@@ -246,7 +307,7 @@ kasumi_FI_avx2:
     vmovdqa     ymm0, [rel vpermw_mask]
     kmovd       k1, edi
     vpmovm2w    ymm10, k1
-    KASUMI_SBOX_AVX2
+    KASUMI_SBOX_AVX512
     vpermw      ymm10 {k5}{z}, ymm1, ymm10      ; rearrange arg1
     vpxord      ymm10, ymm10, ymm2      ; xor arg1, rax
     vpermw      ymm3 {k4}{z}, ymm0, ymm10       ; rearrange arg1
@@ -258,7 +319,7 @@ kasumi_FI_avx2:
     vpand       ymm10, ymm10, [rel least_sig_bit_word]
     vpcmpw      k2, ymm10, [rel least_sig_bit_word], 0
     vpcmpeqw    ymm10, ymm10, [rel least_sig_bit_word]
-    KASUMI_SBOX_AVX2
+    KASUMI_SBOX_AVX512
     vpand       ymm2, ymm2, [rel least_sig_bit_word]
     vpcmpw      k1, ymm2, [rel least_sig_bit_word], 0
     kmovd       edi, k2
