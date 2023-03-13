@@ -118,7 +118,7 @@ new_wmsk8  dq  0xffffffffffffffff, 0x000fffffffffffff, 0x000f000f000f000f, 0x000
 
 align 32
 least_sig_bit_word dq 0x0001000100010001, 0x0001000100010001, 0x0001000100010001, 0x0001000100010001
-vpermb_mask        dq 0x0000000000000000, 0x0000000000000000, 0x0004000300020001, 0x0000000000060005
+vpermb_mask        dq 0x1010101010101010, 0x0000101010101010, 0x0404030302020101, 0x1010101006060505
 vpermw_mask        dq 0x000a000900080007, 0x000f000d000c000b, 0x000f000f000f000f, 0x000f000f000f000f
 
 align 8
@@ -275,8 +275,24 @@ kasumi_FI_avx2:
     xor     rax, arg4
     ret
 
-%macro KASUMI_SBOX_AVX512 0
-    ; vpand with kmask will give words full of corresponding bit values
+%macro KASUMI_SBOX_AVX512a 0
+%assign i 0
+%rep 9
+    vmovdqa     y(i), [rel new_msk(i)]
+    vpermb      y(i), y(i), ymm10    ; fill register with the word value
+%assign i (i + 1)
+%endrep
+    vpor        y0, y0, [rel y_mask(0)]
+%assign i 1
+%rep 8
+    vpternlogq  y0, y(i), [rel y_mask(i)], 0xE0 ; or the x-masks with the x-values
+%assign i (i + 1)
+%endrep
+    vpandd      ymm2, ymm2, [rel y_mask_last] ; mask which accounts for setting 1s and 0s in set locations
+    vpopcntw    ymm2, ymm2
+%endmacro
+
+%macro KASUMI_SBOX_AVX512b 0
 %assign i 0
 %rep 9
     vmovdqa     y(i), [rel new_wmsk(i)]
@@ -302,13 +318,12 @@ MKGLOBAL(kasumi_FI_avx512, function, internal)
 kasumi_FI_avx512:
     xor     arg1, arg2
     kmovd       k4, [rel zero]
-    kmovd       k5, [rel mid]
-    vmovdqa     ymm1, [rel vpermb_mask]         ;; ***
+    vmovdqa     ymm1, [rel vpermb_mask]
     vmovdqa     ymm0, [rel vpermw_mask]
     kmovd       k1, edi
-    vpmovm2w    ymm10, k1
-    KASUMI_SBOX_AVX512
-    vpermw      ymm10 {k5}{z}, ymm1, ymm10      ; rearrange arg1
+    vpmovm2b    ymm10, k1
+    KASUMI_SBOX_AVX512a
+    vpermb      ymm10, ymm1, ymm10      ; rearrange arg1
     vpxord      ymm10, ymm10, ymm2      ; xor arg1, rax
     vpermw      ymm3 {k4}{z}, ymm0, ymm10       ; rearrange arg1
     vpxord      ymm10, ymm10, ymm3      ; xor arg1, r8
@@ -319,7 +334,7 @@ kasumi_FI_avx512:
     vpand       ymm10, ymm10, [rel least_sig_bit_word]
     vpcmpw      k2, ymm10, [rel least_sig_bit_word], 0
     vpcmpeqw    ymm10, ymm10, [rel least_sig_bit_word]
-    KASUMI_SBOX_AVX512
+    KASUMI_SBOX_AVX512b
     vpand       ymm2, ymm2, [rel least_sig_bit_word]
     vpcmpw      k1, ymm2, [rel least_sig_bit_word], 0
     kmovd       edi, k2
